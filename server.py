@@ -7,19 +7,22 @@ Exposes four tools via stdio MCP protocol:
 
 Sections:
   1. Auth     — load_credentials(account) -> Credentials
-  2. API      — gmail_search(), calendar_events()
-  3. MCP      — tool handlers + server entrypoint
+  2. API      — gmail_search(), calendar_events() (stubbed until Tasks 5-6)
+  3. MCP      — tool handlers + server entrypoint (stubbed until Task 7)
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import keyring
 from google.oauth2.credentials import Credentials
-from googleapiclient.errors import HttpError
-from mcp.server.fastmcp import FastMCP
+
+# Reserved for Tasks 5-7. Imported now so the dependency surface is stable
+# before the API + MCP handlers land.
+from googleapiclient.errors import HttpError  # noqa: F401
+from mcp.server.fastmcp import FastMCP  # noqa: F401
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
@@ -31,15 +34,20 @@ KEYCHAIN_SERVICES: dict[str, str] = {
     "work": "google-mcp-work",
 }
 
+# Narrowest scopes covering the four tools: Gmail metadata/snippet search,
+# calendar listing (to filter by accessRole), and event reads.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    "https://www.googleapis.com/auth/calendar.events.readonly",
 ]
+
+Account = Literal["personal", "work"]
 
 # ── Auth ───────────────────────────────────────────────────────────────────
 
 
-def load_credentials(account: str) -> Credentials:
+def load_credentials(account: Account) -> Credentials:
     """Load OAuth credentials from macOS Keychain for the given account.
 
     Args:
@@ -49,15 +57,21 @@ def load_credentials(account: str) -> Credentials:
         A Credentials object ready for use with Google API clients.
 
     Raises:
+        ValueError: If ``account`` is not a known key.
         RuntimeError: If no refresh token exists in Keychain for the account.
     """
+    if account not in KEYCHAIN_SERVICES:
+        raise ValueError(
+            f"Invalid account {account!r}. Expected one of: {sorted(KEYCHAIN_SERVICES)}"
+        )
+
     service_name = KEYCHAIN_SERVICES[account]
     refresh_token = keyring.get_password(service_name, "refresh_token")
 
     if not refresh_token:
         raise RuntimeError(
             f"No credentials found for account '{account}'. "
-            f"Run: uv --directory ~/Code/google-mcp run auth_setup.py {account}"
+            f"Run: uv --directory {_HERE} run auth_setup.py {account}"
         )
 
     client_config = json.loads(CREDENTIALS_PATH.read_text())["installed"]

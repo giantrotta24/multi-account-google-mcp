@@ -16,9 +16,15 @@ from server import calendar_events, gmail_search, load_credentials
 
 
 def _check(label: str, result: dict) -> bool:
-    """Print pass/fail for a tool result and return True if ok."""
+    """Print pass/fail for a tool result and return True if ok.
+
+    On failure, print only the error/code fields — never the full ``result``,
+    which would leak Gmail snippets or calendar payloads once APIs land.
+    """
     if not result.get("ok"):
-        print(f"  FAIL {label}: {result}")
+        error = result.get("error", "<no error field>")
+        code = result.get("code", "<no code>")
+        print(f"  FAIL {label}: code={code} error={error!r}")
         return False
     print(f"  PASS {label} ({len(result['data'])} results)")
     return True
@@ -83,7 +89,7 @@ def test_auth_failure() -> None:
         )
         print("  PASS auth_failure raises RuntimeError with remediation hint")
     finally:
-        if original:
+        if original is not None:
             keyring.set_password("google-mcp-personal", "refresh_token", original)
 
 
