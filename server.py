@@ -87,15 +87,104 @@ def load_credentials(account: Account) -> Credentials:
 
 
 # ── API functions ──────────────────────────────────────────────────────────
-# Stubs — replaced in Tasks 5 and 6. Present here so smoke_test.py can import
-# server.py without AttributeError before implementation exists.
+# gmail_search implemented in Task 5; calendar_events stubbed for Task 6.
+
+
+def _parse_http_error(e: HttpError) -> dict[str, Any]:
+    """Convert a Google API HttpError to the standard error envelope."""
+    try:
+        content = json.loads(e.content.decode())
+        errors = content.get("error", {}).get("errors", [{}])
+        reason = errors[0].get("reason", "") if errors else ""
+    except (json.JSONDecodeError, IndexError):
+        reason = ""
+
+    code = int(e.resp.status)
+
+    if code == 401:
+        return {"ok": False, "error": "auth failed — run auth_setup.py personal or work", "code": 401}
+    if reason in ("rateLimitExceeded", "userRateLimitExceeded"):
+        return {"ok": False, "error": "rate limit exceeded", "code": 429}
+    if code == 403:
+        return {"ok": False, "error": "permission denied", "code": 403}
+    return {"ok": False, "error": str(e), "code": code}
 
 
 def gmail_search(
-    creds: Credentials, query: str, max_results: int = 20
+    creds: Credentials,
+    query: str,
+    max_results: int = 20,
 ) -> dict[str, Any]:
-    """Stub — implemented in Task 5."""
-    raise NotImplementedError("gmail_search not yet implemented — see Task 5")
+    """Search Gmail and return message summaries.
+
+    Uses a list-then-get pattern: messages.list returns IDs only;
+    messages.get (format=metadata) fetches headers and snippet per message.
+    At max_results=20 this is 21 API calls — acceptable for a weekly workflow.
+
+    Args:
+        creds: Authorized Google credentials.
+        query: Gmail search query string (e.g. "is:unread after:2026/04/12").
+        max_results: Maximum messages to return. Hard cap: 50.
+
+    Returns:
+        {"ok": True, "data": [...]} or {"ok": False, "error": "...", "code": N}
+    """
+    from googleapiclient.discovery import build
+    from google.auth.exceptions import RefreshError
+
+    max_results = min(max_results, 50)
+
+    try:
+        service = build("gmail", "v1", credentials=creds)
+
+        list_response = (
+            service.users()
+            .messages()
+            .list(userId="me", q=query, maxResults=max_results)
+            .execute(num_retries=3)
+        )
+
+        messages = list_response.get("messages", [])
+        results: list[dict[str, Any]] = []
+
+        for msg in messages:
+            detail = (
+                service.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=msg["id"],
+                    format="metadata",
+                    metadataHeaders=["From", "Subject", "Date"],
+                )
+                .execute(num_retries=3)
+            )
+
+            headers = {
+                h["name"]: h["value"]
+                for h in detail.get("payload", {}).get("headers", [])
+            }
+
+            results.append(
+                {
+                    "id": detail["id"],
+                    "thread_id": detail["threadId"],
+                    "from": headers.get("From", ""),
+                    "subject": headers.get("Subject", ""),
+                    "date": headers.get("Date", ""),
+                    "snippet": detail.get("snippet", ""),
+                    "labels": detail.get("labelIds", []),
+                }
+            )
+
+        return {"ok": True, "data": results}
+
+    except HttpError as e:
+        return _parse_http_error(e)
+    except RefreshError as e:
+        return {"ok": False, "error": f"token refresh failed: {e}", "code": 401}
+    except Exception as e:
+        return {"ok": False, "error": f"upstream failure: {type(e).__name__}", "code": 503}
 
 
 def calendar_events(
