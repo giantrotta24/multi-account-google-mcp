@@ -235,7 +235,7 @@ def calendar_events(
         if calendar_names is not None:
             owned_calendars = [
                 cal for cal in owned_calendars
-                if cal.get("summary", "") in calendar_names
+                if cal.get("summary", "") in calendar_names or cal.get("id", "") in calendar_names
             ]
 
         results: list[dict[str, Any]] = []
@@ -414,7 +414,7 @@ def calendar_events_work(time_min: str, time_max: str, max_results: int = 50) ->
     result = _load_or_error("work")
     if isinstance(result, dict):
         return result
-    return calendar_events(result, time_min, time_max, max_results, calendar_names=["Gian Trotta"])
+    return calendar_events(result, time_min, time_max, max_results, calendar_names=["gian@rvshare.com"])
 
 
 if __name__ == "__main__":
