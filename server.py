@@ -21,8 +21,8 @@ from google.oauth2.credentials import Credentials
 
 # Reserved for Tasks 5-7. Imported now so the dependency surface is stable
 # before the API + MCP handlers land.
-from googleapiclient.errors import HttpError  # noqa: F401
-from mcp.server.fastmcp import FastMCP  # noqa: F401
+from googleapiclient.errors import HttpError
+from mcp.server.fastmcp import FastMCP
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
@@ -303,8 +303,115 @@ def calendar_events(
 
 
 # ── MCP server ─────────────────────────────────────────────────────────────
-# (implemented in Task 7)
+
+mcp = FastMCP("google-multi-account")
+
+
+def _load_or_error(account: str) -> Credentials | dict[str, Any]:
+    """Return credentials or an error envelope if Keychain lookup fails."""
+    try:
+        return load_credentials(account)
+    except RuntimeError as e:
+        return {"ok": False, "error": str(e), "code": 401}
+
+
+@mcp.tool()
+def gmail_search_personal(query: str, max_results: int = 20) -> dict[str, Any]:
+    """Search Gmail for giantrotta24@gmail.com.
+
+    Use this tool when the user asks about email in their personal inbox — unread, from a specific sender, mentioning a topic, in a date range, etc.
+
+    Args:
+        query: Gmail search syntax. Common operators:
+            - is:unread, is:read, is:starred, is:important
+            - from:alice@example.com, to:me, cc:bob@example.com
+            - subject:"project kickoff"
+            - after:YYYY/MM/DD, before:YYYY/MM/DD (e.g. "after:2026/04/12")
+            - has:attachment, filename:pdf
+            - label:inbox, in:anywhere
+            - Combine with space (AND) or OR: "is:unread after:2026/04/12"
+        max_results: Max messages to return (default 20, cap 50).
+
+    Returns:
+        {"ok": True, "data": [{id, thread_id, from, subject, date, snippet, labels}, ...]}
+        or {"ok": False, "error": "...", "code": N}
+    """
+    result = _load_or_error("personal")
+    if isinstance(result, dict):
+        return result
+    return gmail_search(result, query, max_results)
+
+
+@mcp.tool()
+def gmail_search_work(query: str, max_results: int = 20) -> dict[str, Any]:
+    """Search Gmail for gian@rvshare.com.
+
+    Use this tool when the user asks about email in their work inbox — unread, from a specific sender, mentioning a topic, in a date range, etc.
+
+    Args:
+        query: Gmail search syntax. Common operators:
+            - is:unread, is:read, is:starred, is:important
+            - from:alice@example.com, to:me, cc:bob@example.com
+            - subject:"project kickoff"
+            - after:YYYY/MM/DD, before:YYYY/MM/DD (e.g. "after:2026/04/12")
+            - has:attachment, filename:pdf
+            - label:inbox, in:anywhere
+            - Combine with space (AND) or OR: "is:unread after:2026/04/12"
+        max_results: Max messages to return (default 20, cap 50).
+
+    Returns:
+        {"ok": True, "data": [{id, thread_id, from, subject, date, snippet, labels}, ...]}
+        or {"ok": False, "error": "...", "code": N}
+    """
+    result = _load_or_error("work")
+    if isinstance(result, dict):
+        return result
+    return gmail_search(result, query, max_results)
+
+
+@mcp.tool()
+def calendar_events_personal(time_min: str, time_max: str, max_results: int = 50) -> dict[str, Any]:
+    """List calendar events for giantrotta24@gmail.com.
+
+    Use this tool when the user asks about meetings or events on their personal calendar within a date range. Returns events from all owned/writable calendars — excludes read-only calendars like holidays and subscriptions.
+
+    Args:
+        time_min: ISO 8601 lower bound, e.g. "2026-04-12T00:00:00Z".
+        time_max: ISO 8601 upper bound, e.g. "2026-04-26T23:59:59Z".
+        max_results: Max events per calendar (default 50, cap 100). Total
+            results may exceed this if the user has multiple calendars.
+
+    Returns:
+        {"ok": True, "data": [{id, summary, start, end, location, description, attendees, status, all_day}, ...]}
+        or {"ok": False, "error": "...", "code": N}
+    """
+    result = _load_or_error("personal")
+    if isinstance(result, dict):
+        return result
+    return calendar_events(result, time_min, time_max, max_results)
+
+
+@mcp.tool()
+def calendar_events_work(time_min: str, time_max: str, max_results: int = 50) -> dict[str, Any]:
+    """List calendar events for gian@rvshare.com.
+
+    Use this tool when the user asks about meetings or events on their work calendar within a date range. Returns events from all owned/writable calendars — excludes read-only calendars like holidays and subscriptions.
+
+    Args:
+        time_min: ISO 8601 lower bound, e.g. "2026-04-12T00:00:00Z".
+        time_max: ISO 8601 upper bound, e.g. "2026-04-26T23:59:59Z".
+        max_results: Max events per calendar (default 50, cap 100). Total
+            results may exceed this if the user has multiple calendars.
+
+    Returns:
+        {"ok": True, "data": [{id, summary, start, end, location, description, attendees, status, all_day}, ...]}
+        or {"ok": False, "error": "...", "code": N}
+    """
+    result = _load_or_error("work")
+    if isinstance(result, dict):
+        return result
+    return calendar_events(result, time_min, time_max, max_results)
 
 
 if __name__ == "__main__":
-    pass  # replaced in Task 7
+    mcp.run(transport="stdio")
