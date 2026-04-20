@@ -96,7 +96,7 @@ def _parse_http_error(e: HttpError) -> dict[str, Any]:
         content = json.loads(e.content.decode())
         errors = content.get("error", {}).get("errors", [{}])
         reason = errors[0].get("reason", "") if errors else ""
-    except (json.JSONDecodeError, IndexError):
+    except (json.JSONDecodeError, AttributeError, UnicodeDecodeError, ValueError):
         reason = ""
 
     code = int(e.resp.status)
