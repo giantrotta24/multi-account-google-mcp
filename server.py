@@ -19,8 +19,6 @@ from typing import Any, Literal
 import keyring
 from google.oauth2.credentials import Credentials
 
-# Reserved for Tasks 5-7. Imported now so the dependency surface is stable
-# before the API + MCP handlers land.
 from googleapiclient.errors import HttpError
 from mcp.server.fastmcp import FastMCP
 

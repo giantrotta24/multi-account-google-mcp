@@ -8,7 +8,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json  # noqa: F401 — reserved for Tasks 5-7
 from pathlib import Path
 
 import keyring
