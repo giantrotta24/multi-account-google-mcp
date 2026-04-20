@@ -7,8 +7,8 @@ Exposes four tools via stdio MCP protocol:
 
 Sections:
   1. Auth     — load_credentials(account) -> Credentials
-  2. API      — gmail_search(), calendar_events() (stubbed until Tasks 5-6)
-  3. MCP      — tool handlers + server entrypoint (stubbed until Task 7)
+  2. API      — gmail_search(), calendar_events()
+  3. MCP      — tool handlers + server entrypoint
 """
 from __future__ import annotations
 
@@ -87,7 +87,6 @@ def load_credentials(account: Account) -> Credentials:
 
 
 # ── API functions ──────────────────────────────────────────────────────────
-# gmail_search implemented in Task 5; calendar_events stubbed for Task 6.
 
 
 def _parse_http_error(e: HttpError) -> dict[str, Any]:
@@ -307,7 +306,7 @@ def calendar_events(
 mcp = FastMCP("google-multi-account")
 
 
-def _load_or_error(account: str) -> Credentials | dict[str, Any]:
+def _load_or_error(account: Account) -> Credentials | dict[str, Any]:
     """Return credentials or an error envelope if Keychain lookup fails."""
     try:
         return load_credentials(account)
