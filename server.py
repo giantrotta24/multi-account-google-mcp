@@ -188,10 +188,118 @@ def gmail_search(
 
 
 def calendar_events(
-    creds: Credentials, time_min: str, time_max: str, max_results: int = 50
+    creds: Credentials,
+    time_min: str,
+    time_max: str,
+    max_results: int = 50,
 ) -> dict[str, Any]:
-    """Stub — implemented in Task 6."""
-    raise NotImplementedError("calendar_events not yet implemented — see Task 6")
+    """List calendar events across all owned and writable calendars.
+
+    Excludes read-only calendars (holidays, subscriptions, shared viewer-only).
+    Normalizes all-day events (date) to YYYY-MM-DD and timed events (dateTime)
+    to ISO 8601 with timezone. Results are sorted by start time.
+
+    Note: max_results applies per calendar. With multiple owned calendars,
+    total results may exceed this value. Hard cap per calendar: 100.
+
+    Args:
+        creds: Authorized Google credentials.
+        time_min: ISO 8601 lower bound, e.g. "2026-04-12T00:00:00Z".
+        time_max: ISO 8601 upper bound, e.g. "2026-04-26T23:59:59Z".
+        max_results: Maximum events per calendar. Hard cap: 100.
+
+    Returns:
+        {"ok": True, "data": [...]} or {"ok": False, "error": "...", "code": N}
+    """
+    from googleapiclient.discovery import build
+    from google.auth.exceptions import RefreshError
+
+    max_results = min(max_results, 100)
+
+    try:
+        service = build("calendar", "v3", credentials=creds)
+
+        # Paginate calendarList to handle accounts with many calendars.
+        all_calendars: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            response = service.calendarList().list(pageToken=page_token).execute(num_retries=3)
+            all_calendars.extend(response.get("items", []))
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        owned_calendars = [
+            cal for cal in all_calendars
+            if cal.get("accessRole") in ("owner", "writer")
+        ]
+
+        results: list[dict[str, Any]] = []
+
+        for cal in owned_calendars:
+            # Paginate events within each calendar, stopping once we've hit
+            # the per-calendar max_results cap. events.list(maxResults=...)
+            # controls page size, NOT total results — without this guard a
+            # busy calendar would return every matching event across all pages.
+            events_for_calendar = 0
+            events_page_token: str | None = None
+            while events_for_calendar < max_results:
+                remaining = max_results - events_for_calendar
+                events_response = (
+                    service.events()
+                    .list(
+                        calendarId=cal["id"],
+                        timeMin=time_min,
+                        timeMax=time_max,
+                        maxResults=min(remaining, max_results),
+                        singleEvents=True,
+                        orderBy="startTime",
+                        pageToken=events_page_token,
+                    )
+                    .execute(num_retries=3)
+                )
+
+                for event in events_response.get("items", []):
+                    if events_for_calendar >= max_results:
+                        break
+
+                    start_raw = event.get("start", {})
+                    end_raw = event.get("end", {})
+                    all_day = "date" in start_raw and "dateTime" not in start_raw
+
+                    attendees = [
+                        {"name": a.get("displayName", ""), "email": a.get("email", "")}
+                        for a in event.get("attendees", [])
+                    ]
+
+                    results.append(
+                        {
+                            "id": event["id"],
+                            "summary": event.get("summary", ""),
+                            "start": start_raw.get("date") if all_day else start_raw.get("dateTime", ""),
+                            "end": end_raw.get("date") if all_day else end_raw.get("dateTime", ""),
+                            "location": event.get("location"),
+                            "description": event.get("description"),
+                            "attendees": attendees,
+                            "status": event.get("status", "confirmed"),
+                            "all_day": all_day,
+                        }
+                    )
+                    events_for_calendar += 1
+
+                events_page_token = events_response.get("nextPageToken")
+                if not events_page_token:
+                    break
+
+        results.sort(key=lambda e: e["start"] or "")
+        return {"ok": True, "data": results}
+
+    except HttpError as e:
+        return _parse_http_error(e)
+    except RefreshError as e:
+        return {"ok": False, "error": f"token refresh failed: {e}", "code": 401}
+    except Exception as e:
+        return {"ok": False, "error": f"upstream failure: {type(e).__name__}", "code": 503}
 
 
 # ── MCP server ─────────────────────────────────────────────────────────────
