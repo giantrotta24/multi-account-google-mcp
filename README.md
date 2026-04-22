@@ -7,7 +7,6 @@ Multi-account Google MCP server exposing Gmail and Calendar read tools over stdi
 - `credentials.json` is local-only and must never be committed.
 - Copy `credentials.template.json` to `credentials.json` and fill it with your local OAuth client values.
 - Refresh tokens are stored in your OS keychain (`keyring`), not in source control.
-- Before publishing, rotate any OAuth client secret that may have appeared in local files.
 
 ## Setup
 
