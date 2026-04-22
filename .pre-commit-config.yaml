@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: security-check
+        name: security-check
+        entry: python scripts/security_check.py
+        language: python
+        pass_filenames: false

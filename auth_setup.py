@@ -8,21 +8,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 import keyring
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from server import KEYCHAIN_SERVICES, SCOPES
-
-_HERE = Path(__file__).parent
-CREDENTIALS_PATH = _HERE / "credentials.json"
-
-EXPECTED_EMAILS: dict[str, str] = {
-    "personal": "giantrotta24@gmail.com",
-    "work": "gian@rvshare.com",
-}
+from config import CREDENTIALS_PATH, KEYCHAIN_SERVICES, SCOPES, get_expected_email
 
 
 def main() -> None:
@@ -33,8 +24,8 @@ def main() -> None:
     args = parser.parse_args()
 
     account: str = args.account
-    expected_email = EXPECTED_EMAILS[account]
     service_name = KEYCHAIN_SERVICES[account]
+    expected_email = get_expected_email(account)
 
     if not CREDENTIALS_PATH.exists():
         raise SystemExit(
@@ -63,10 +54,15 @@ def main() -> None:
     profile = gmail_service.users().getProfile(userId="me").execute()
     authorized_email: str = profile["emailAddress"]
 
-    if authorized_email != expected_email:
+    if expected_email and authorized_email != expected_email:
         raise SystemExit(
             f"ERROR: Authorized as '{authorized_email}' but expected '{expected_email}'.\n"
             "Re-run and sign in with the correct Google account."
+        )
+    if not expected_email:
+        print(
+            f"! No expected email configured for '{account}'. "
+            "Set GOOGLE_MCP_PERSONAL_EMAIL / GOOGLE_MCP_WORK_EMAIL to enforce account checks."
         )
 
     if not creds.refresh_token:

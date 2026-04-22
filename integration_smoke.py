@@ -1,12 +1,14 @@
 """
 Integration smoke tests for google-mcp.
-Calls real Google APIs — requires auth_setup.py to have been run for both accounts.
+
+Calls real Google APIs and mutates local keychain credentials during one test.
 
 Usage:
-    uv --directory ~/Code/google-mcp run smoke_test.py
+    RUN_LIVE_TESTS=1 uv --directory ~/Code/google-mcp run integration_smoke.py
 """
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -16,11 +18,7 @@ from server import calendar_events, gmail_search, load_credentials
 
 
 def _check(label: str, result: dict) -> bool:
-    """Print pass/fail for a tool result and return True if ok.
-
-    On failure, print only the error/code fields — never the full ``result``,
-    which would leak Gmail snippets or calendar payloads once APIs land.
-    """
+    """Print pass/fail for a tool result and return True if ok."""
     if not result.get("ok"):
         error = result.get("error", "<no error field>")
         code = result.get("code", "<no code>")
@@ -28,6 +26,14 @@ def _check(label: str, result: dict) -> bool:
         return False
     print(f"  PASS {label} ({len(result['data'])} results)")
     return True
+
+
+def _require_live_flag() -> None:
+    if os.getenv("RUN_LIVE_TESTS") != "1":
+        raise SystemExit(
+            "Refusing to run live integration tests.\n"
+            "Set RUN_LIVE_TESTS=1 to confirm you intend to hit real APIs."
+        )
 
 
 def test_auth() -> None:
@@ -77,7 +83,7 @@ def test_calendar() -> None:
 
 
 def test_auth_failure() -> None:
-    """Verify a missing Keychain credential surfaces a helpful RuntimeError."""
+    """Verify missing keychain credential surfaces a helpful RuntimeError."""
     original = keyring.get_password("google-mcp-personal", "refresh_token")
     keyring.delete_password("google-mcp-personal", "refresh_token")
     try:
@@ -94,7 +100,14 @@ def test_auth_failure() -> None:
 
 
 if __name__ == "__main__":
-    tests = [test_auth, test_gmail, test_calendar, test_auth_failure]
+    _require_live_flag()
+
+    tests = [test_auth, test_gmail, test_calendar]
+    if os.getenv("RUN_DESTRUCTIVE_TESTS") == "1":
+        tests.append(test_auth_failure)
+    else:
+        print("Skipping destructive keychain test. Set RUN_DESTRUCTIVE_TESTS=1 to include it.")
+
     passed = 0
     failed = 0
 
@@ -110,3 +123,4 @@ if __name__ == "__main__":
     print(f"\n{'─' * 40}")
     print(f"Results: {passed} passed, {failed} failed")
     sys.exit(0 if failed == 0 else 1)
+
