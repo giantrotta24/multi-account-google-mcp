@@ -19,6 +19,7 @@ KEYCHAIN_SERVICES: dict[Account, str] = {
 # calendar listing (to filter by accessRole), and event reads.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     "https://www.googleapis.com/auth/calendar.events.readonly",
 ]
